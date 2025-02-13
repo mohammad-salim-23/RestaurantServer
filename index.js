@@ -11,11 +11,12 @@ const port = process.env.PORT || 5000;
 // Middleware
 app.use(cors({
   origin: [
-    'http://localhost:5173',
-    "https://assignment-11-client-1d064.web.app",
-    "https://assignment-11-client-1d064.firebaseapp.com"
+     "*",
+    "https://restaurant-pink-three.vercel.app"
   ],
-  credentials: true,
+  credentials: true, // Allow credentials
+  methods: "GET, POST, PUT, DELETE, OPTIONS", // Ensure all required methods are allowed
+  allowedHeaders: "Content-Type, Authorization" // Allow necessary headers
 }));
 app.use(express.json());
 app.use(cookieParser());
@@ -51,12 +52,36 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    const foodsCollection = client.db("foodsDB").collection("foods");
+    const foodsCollection = client.db("foodsDB").collection("fods");
+    const userCollection = client.db("foodsDB").collection("users"); // নতুন Collection
+    
+    // User Signup/Login - Save User in Database
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      
+      // Check if user already exists
+      const existingUser = await userCollection.findOne({ email: user.email });
+      if (existingUser) {
+        return res.status(409).send({ message: "User already exists" });
+      }
 
+      // Insert new user
+      const result = await userCollection.insertOne(user);
+      res.send(result);
+    });
+    app.get("/user/:email", async (req, res) => {
+     const email = req.params.email;
+     const user = await userCollection.findOne({email:email})
+     if(user){
+      res.send(user);
+     }else{
+      res.status(404).send({message: "Users not found"});
+     }
+    });
     // Authentication Routes
     app.post('/jwt', async (req, res) => {
       const user = req.body;
-      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '10h' });
       res.cookie('token', token, cookieOptions).send({ success: true });
     });
 
@@ -81,7 +106,7 @@ async function run() {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
         const result = await foodsCollection.findOne(query);
-        res.send(result);
+        res.send({foods: result});
       } catch (error) {
         console.error(error);
         res.status(500).send({ error: "Internal Server Error" });
@@ -89,16 +114,24 @@ async function run() {
     });
 
     app.put("/food/:id", async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const updateFood = {
-        $set: req.body
-      };
-      const result = await foodsCollection.updateOne(filter, updateFood);
-      res.send(result);
-    });
-
-    app.delete("/food/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+    
+        // Validate ObjectId
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ error: "Invalid ID format" });
+        }
+    
+        const filter = { _id: new ObjectId(id) };
+        const updateFood = { $set: req.body };
+    
+        const result = await foodsCollection.updateOne(filter, updateFood);
+    
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });    app.delete("/food/:id", async (req, res) => {
       try {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
