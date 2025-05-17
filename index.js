@@ -9,12 +9,25 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 // Middleware
+const allowedOrigins = [
+  "https://www.royalcrowncafebd.com",
+  "http://localhost:5000",
+  "http://localhost:5173"
+];
+
 app.use(
   cors({
-    origin: "https://www.royalcrowncafebd.com", 
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
+
 app.use(express.json());
 app.use(cookieParser());
 
@@ -50,8 +63,8 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     const foodsCollection = client.db("foodsDB").collection("fods");
-    const userCollection = client.db("foodsDB").collection("users"); // নতুন Collection
-    
+    const userCollection = client.db("foodsDB").collection("users"); 
+      const employeeCollection = client.db("foodsDB").collection("employees");
     // User Signup/Login - Save User in Database
     app.post("/users", async (req, res) => {
       const user = req.body;
@@ -139,6 +152,71 @@ async function run() {
         res.status(500).send({ error: "Internal Server Error" });
       }
     });
+     // Create a new employee
+    app.post("/employee", async (req, res) => {
+      try {
+        const newEmployee = req.body;
+        const result = await employeeCollection.insertOne(newEmployee);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to create employee" });
+      }
+    });
+
+    // Get all employees
+    app.get("/employee", async (req, res) => {
+      try {
+        const result = await employeeCollection.find().toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to fetch employees" });
+      }
+    });
+
+    // Get a single employee by ID
+    app.get("/employee/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await employeeCollection.findOne(query);
+        if (!result) {
+          return res.status(404).send({ message: "Employee not found" });
+        }
+        res.send({ employee: result });
+      } catch (error) {
+        res.status(500).send({ error: "Failed to fetch employee" });
+      }
+    });
+
+    // Update an employee
+    app.put("/employee/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ error: "Invalid ID format" });
+        }
+
+        const filter = { _id: new ObjectId(id) };
+        const update = { $set: req.body };
+
+        const result = await employeeCollection.updateOne(filter, update);
+        res.send(result);
+      } catch (error) {
+        res.status(500).json({ error: "Failed to update employee" });
+      }
+    });
+
+    // Delete an employee
+    app.delete("/employee/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await employeeCollection.deleteOne(query);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to delete employee" });
+      }
+    });
 
     console.log("Connected to MongoDB!");
   } finally {
@@ -154,5 +232,3 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
-
-module.exports = app;
